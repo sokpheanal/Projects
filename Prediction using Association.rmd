@@ -1,0 +1,402 @@
+---
+title: "Prediction using Association"
+author: "Sokpheanal Huynh"
+date: "2023/06/06"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# Outline
+
+* [X] Examine data
+* [X] Formulate questions
+* [X] Plan analysis - Pseudo Code
+* [X] Plan charts
+* [X] Create Predictions
+* [X] Create Chart
+
+# Data
+
+"Real" data can be found [here](https://www.pro-football-reference.com/years/1971/games.htm) and [here](https://en.wikipedia.org/wiki/National_Football_League_franchise_moves_and_mergers).
+
+# Solution
+
+````{r}
+data_1971 <- read.csv('1971.csv')
+data_2021 <- read.csv('2021.csv')
+
+str(data_1971)
+str(data_2021)
+View(data_1971)
+View(data_2021)
+```
+
+QC
+
+```{r}
+ncol(data_1971) == ncol(data_2021)
+all(colnames(data_1971) == colnames(data_2021))
+
+str(data_1971)
+class(data_1971)
+class(data_1971$Week)
+
+all(sapply(data_1971, class) == sapply(data_2021, class))
+```
+
+```{r}
+game_files <- list.files(pattern = '[0-9]{4}\\.csv')
+
+library(lubridate)
+library(dplyr)
+
+games_data_raw <- vector(mode = 'list', length = length(game_files))
+for(i in 1:length(games_data_raw)) {
+  games_data_raw[[i]] <- 
+    read.csv(game_files[i]) %>%
+    filter(Date != 'Playoffs') %>%
+    mutate(Date = ymd(Date),
+           Season = min(year(Date)))
+   
+
+  qc1 <- print(ncol(games_data_raw[[1]]) == ncol(games_data_raw[[i]]))
+  qc2 <- all(colnames(games_data_raw[[1]]) == colnames(games_data_raw[[i]]))
+  qc3 <- all(sapply(games_data_raw[[1]], class) == sapply(games_data_raw[[i]], class))
+
+  if(all(qc1, qc2, qc3)) {} else { stop('QC failed') }
+}
+games_data <- do.call(rbind, games_data_raw)
+```
+
+```{r}
+crosswalk_file <-'crosswalk.csv'
+crosswalk_data <- read.csv(crosswalk_file)
+
+str(crosswalk_data)
+View(crosswalk_data)
+```
+
+```{r}
+#install.packages('tidyr')
+library(tidyr)
+
+game_data <-
+  games_data %>%
+  left_join(crosswalk_data, by = c('Winner.tie' = 'Old')) %>%
+  mutate(Winner.tie = ifelse(is.na(New), Winner.tie, New), New = NULL) %>%
+  left_join(crosswalk_data, by = c('Loser.tie' = 'Old')) %>%
+  mutate(Loser.tie = ifelse(is.na(New), Loser.tie, New))
+```
+
+```{r}
+rm(crosswalk_data, games_data_raw, crosswalk_file, game_files, i, qc1, qc2, qc3, data_1971, data_2021, games_data)
+```
+
+# Questions
+
+Given a specific game, can we tell who is more likely to win?
+
+* Odds Ratios
+* History
+  * How much? 10
+  * Same teams - no
+  * home vs away - no
+
+# Steps
+
+1. Filtering
+2. Odds Ratio ~ calculate the number of wins and losses for history(10) per game
+3. Calculate if we are right
+4. Roll-up accuracy to a season level
+5. Charts - top-line accuracy
+
+```{r}
+game_data2 <-
+  game_data %>%
+  filter(Pts != Pts.1) %>%
+  select(
+    Season,
+    Date,
+    Time,
+    Winner = Winner.tie,
+    Loser = Loser.tie)
+```
+
+Predict (by hand)
+
+* Denver 2 and 8
+* San Diego 4 and6
+
+```{r}
+game_data[340,]
+game_data2 <- game_data
+```
+
+Predict (little code)
+
+```{r}
+n <- 10
+team <- 'Denver Broncos'
+
+t1 <-
+  game_data %>%
+  filter(Date < ymd('1972-12-10')) %>%
+  filter(Winner == team | Loser == team) %>%
+  arrange(desc(Date)) %>%
+  slice_head(n = n)
+sum(t1$Winner == team)
+sum(t1$Loser == team)
+```
+
+
+```{r}
+team <- 'San Diego Chargers'
+
+t1 <-
+  game_data %>%
+  filter(Date < ymd('1972-12-10')) %>%
+  filter(Winner == team | Loser == team) %>%
+  arrange(desc(Date)) %>%
+  slice_head(n = n)
+sum(t1$Winner == team)
+sum(t1$Loser == team)
+```
+
+* Denver Broncos 2 and 8
+* San Diego Chargers 4 and 6
+
+Predict (rolling wins - single team)
+
+```{r}
+n <- 10
+team <- 'Denver Broncos'
+
+t1 <-
+  game_data %>%
+  filter(Date <= ymd('1973-12-10')) %>%
+  filter(Winner == team | Loser == team) 
+
+t2 <-
+  t1 %>%
+  transmute(
+    Season,
+    Date,
+    Team = Winner,
+    Win = 1)
+t3 <-
+  t1 %>%
+  transmute(
+    Season,
+    Date,
+    Team = Loser,
+    Win = 0)
+t4 <-
+  rbind(t2, t3) %>%
+  filter(Team == team) %>%
+  arrange(Date)
+```
+
+Roll
+
+```{r}
+library(RcppRoll)
+
+t5 <-
+  t4 %>%
+  mutate(
+    WinR = roll_sum(Win, n = n, align = 'right', fill = NA),
+    WinRS = c(NA, WinR[1:(n()-1)]),
+    LossR = roll_sum(!Win, n = n, align = 'right', fill = NA),
+    LossRS = c(NA, LossR[1:(n()-1)]))
+t5[26,c('WinRS', 'LossRS')]
+```
+
+```{r}
+n <- 10
+team <- 'San Diego Chargers'
+
+t1 <-
+  game_data %>%
+  filter(Date <= ymd('1973-12-10')) %>%
+  filter(Winner == team | Loser == team) 
+t2 <-
+  t1 %>%
+  transmute(
+    Season,
+    Date,
+    Team = Winner,
+    Win = 1)
+t3 <-
+  t1 %>%
+  transmute(
+    Season,
+    Date,
+    Team = Loser,
+    Win = 0)
+t4 <-
+  rbind(t2, t3) %>%
+  filter(Team == team) %>%
+  arrange(Date) %>%
+  mutate(
+    WinR = roll_sum(Win, n = n, align = 'right', fill = NA),
+    WinRS = c(NA, WinR[1:(n()-1)]),
+    LossR = roll_sum(!Win, n = n, align = 'right', fill = NA),
+    LossRS = c(NA, LossR[1:(n()-1)]))
+t4[nrow(t4), c('WinRS', 'LossRS')]  
+```
+
+* Denver Broncos 2 and 8
+* San Diego Chargers 4 and 6
+
+Predict (Rolling wins - all teams/all dates)
+
+```{r}
+n <- 10
+t2 <-
+  game_data %>%
+  transmute(
+    Season,
+    Date,
+    Team = Winner,
+    Win = 1)
+t3 <-
+  game_data %>%
+  transmute(
+    Season,
+    Date,
+    Team = Loser,
+    Win = 0)
+rolling_odds <-
+  rbind(t2, t3) %>%
+  arrange(Date) %>%
+  group_by(Team) %>%
+  mutate(
+    WinR = roll_sum(Win, n = n, align = 'right', fill = NA),
+    WinRS = c(NA, WinR[1:(n()-1)]),
+    LossR = roll_sum(!Win, n = n, align = 'right', fill = NA),
+    LossRS = c(NA, LossR[1:(n()-1)])) %>%
+  select(Season, Date, Team, WinRS, LossRS)
+```
+
+QC
+
+```{r}
+rolling_odds %>%
+  filter(Date == ymd('1972-12-10')) %>%
+  filter(Team == 'Denver Broncos' | Team == 'San Diego Chargers')
+
+game_data %>%
+  filter(Date == ymd('1972-12-10')) %>%
+  filter(Winner == 'Denver Broncos' | Winner == 'San Diego Chargers')
+```
+
+Predict (full)
+
+* DF Team 1 and Team 2 for each game
+* DF needs to not leak info
+* Use 'rolling_odds' to predict result
+* Compare that to ground truth ('game_data')
+
+```{r}
+set.seed(0)
+
+game_data <- 
+  game_data %>%
+  mutate(ID = row_number())
+
+ground_truth <-
+  game_data %>%
+  select(ID, Winner)
+
+indx <- sample(1:2, size = nrow(game_data), replace= T)
+games <-
+  game_data %>%
+  mutate(
+    Team1 = ifelse(indx == 1, Winner, Loser),
+    Team2 = ifelse(indx == 2, Winner, Loser)) %>%
+  select(ID, Season, Date, Team1, Team2)
+```
+
+Join
+
+```{r}
+t1 <-
+  games %>%
+  left_join(rolling_odds, by = c('Season' = 'Season', 'Date' = 'Date', 'Team1' = 'Team')) %>%
+  mutate(
+    Team1_Odds = WinRS/LossRS,
+    WinRS = NULL,
+    LossRS = NULL) %>%
+  left_join(rolling_odds, by = c('Season' = 'Season', 'Date' = 'Date', 'Team2' = 'Team')) %>%
+  mutate(
+    Team2_Odds = WinRS/LossRS,
+    WinRS = NULL,
+    LossRS = NULL)
+```
+
+QC
+
+```{r}
+nrow(t1) == nrow(games)
+```
+
+Make Prediction
+
+```{r}
+prediction <-
+  t1 %>%
+  mutate(
+    Winner = ifelse(Team1_Odds > Team2_Odds, Team1, Team2)) %>%
+  select(ID, Winner)
+```
+
+Compare
+
+```{r}
+results <-
+  ground_truth %>%
+  left_join(prediction, by = c('ID' = 'ID')) %>%
+  select(
+    ID,
+    Actual = Winner.x,
+    Predicted = Winner.y) %>%
+  mutate(
+    Correct = Actual == Predicted)
+
+sum(results$Correct, na.rm = T)
+sum(!results$Correct, na.rm = T)
+```
+
+Results: 60% overall
+
+```{r}
+t1 <-
+  games %>%
+  select(ID, Season)
+t2 <-
+  results %>%
+  left_join(t1, by = c('ID' = 'ID'))
+
+t3 <-
+  t2 %>%
+  group_by(Season) %>%
+  summarise(
+    Wrong = sum(!Correct, na.rm = T),
+    Correct = sum(Correct, na.rm = T),
+    Total = Correct + Wrong,
+    N = n(),
+    ACC = Correct/Total)
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(t3, aes(x = Season, y = ACC)) +
+  theme_bw() +
+  geom_line() + 
+  geom_hline(yintercept =  0.5)
+```
+
+
+
