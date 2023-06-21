@@ -1,0 +1,809 @@
+---
+title: "ANLY 500 Final Project"
+author: "Sokpheanal Huynh"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Loading data
+```{r load dataset}
+getwd()
+setwd("D:/Analytics 1 - Principal and Application/Project")
+car_price_assignment <- read.csv("D:/Analytics 1 - Principal and Application/Project/CarPrice_Assignment.csv")
+```
+
+Load necessary packages
+```{r packages}
+library(tidyverse)
+library(gridExtra)
+library(DataExplorer)
+library(car)
+library(nortest)
+library(lmtest)
+
+list.files(path = "../Project")
+```
+Data structure
+```{r structure}
+str(car_price_assignment)
+```
+Factorizing categorical variables
+```{r factor categorical variable}
+# Changing discretes column as a factor.
+
+car_price_assignment$fueltype <- as.factor(car_price_assignment$fueltype)
+car_price_assignment$aspiration <- as.factor(car_price_assignment$aspiration)
+car_price_assignment$doornumber <- as.factor(car_price_assignment$doornumber)
+car_price_assignment$carbody <- as.factor(car_price_assignment$carbody)
+car_price_assignment$drivewheel <- as.factor(car_price_assignment$drivewheel)
+car_price_assignment$enginelocation <- as.factor(car_price_assignment$enginelocation)
+car_price_assignment$enginetype <- as.factor(car_price_assignment$enginetype)
+car_price_assignment$fuelsystem <- as.factor(car_price_assignment$fuelsystem)
+car_price_assignment$cylindernumber <- as.factor(car_price_assignment$cylindernumber)
+
+# Dropping columns with no predictive value
+
+car_price_assignment$car_ID <- NULL
+car_price_assignment$CarName <- NULL
+
+# Transforming feature cylindernumber from text to its numeric equivalent
+
+levels(car_price_assignment$cylindernumber) <- c("8","5","4","6","3","12","2")
+car_price_assignment$cylindernumber <-   as.numeric(as.character (car_price_assignment$cylindernumber))
+```
+Dataset summary
+```{r summary}
+summary(car_price_assignment)
+```
+Checking for missing values (NAs):
+```{r check missing values}
+lapply(car_price_assignment,
+       function(x) {sum(is.na(x))})
+```
+## EDA
+
+## Continuous variable correlation
+Create the fig function
+```{r fig function}
+fig <- function(width, height) {
+  options(repr.plot.width = width,
+          repr.plot.height = height)
+}
+```
+
+## Correlation Matrix for continuous variable
+```{r correlation plot}
+fig(14, 12)
+
+plot_correlation(car_price_assignment,
+                 type = "c",
+                 cor_args = list("use" = "pairwise.complete.obs"),
+                 title = "Correlation matrix, continuous variable",
+                 theme_config = list(title = element_text(size=20),
+                                     axis.text.y = element_text(size = 15),
+                                     axis.text.x = element_text(hjust = 1,
+                                                                angle = 45,
+                                                                size = 15)))
+```
+## Collinearity check
+```{r collinearity check}
+cor(car_price_assignment$citympg,
+    car_price_assignment$highwaympg,
+    use = "complete.obs")
+```
+There is a high correlation between "citympg" - "highwaympg", indicating a possible collinearity problem, it will probably not be useful to introduce both pairs in the model.
+
+## Continuous vs dependent variable distribution
+```{r boxplot function by price}
+# Boxplot funtion by "price"
+fig(18,16)
+plot_boxplot(car_price_assignment, by = "price", nrow = 5L,
+             geom_boxplot_args = list("outlier.color" = "red"),
+             theme_config = list(text = element_text(size=18),
+                                 axis.text.y = element_text(size = 15),
+                                 axis.text.x = element_text(size = 15))
+            )
+```
+    The features: boreratio, carlength, carwidth, curbweight, cylindernumber, enginesize, horsepower and wheelbase, have a significant and positive relationship with the price of the vehicle, a clear indication that a larger vehicle with more horsepower obviously it has a higher cost.
+    There are other features that have no or little influence on the price of the vehicle such as carheight, compressionration, peakrpm, stroke and symboling.
+    The citympg and highwaympg variables are negatively related to the Vehicle value. The most expensive vehicles have lower performance in fuel consumption.
+
+## Distribution of discretes variables in relation to the dependent variable.
+
+```{r distribution categorical vs dependent}
+fig(17,8)
+
+pl1 <- ggplot(car_price_assignment) +
+ aes(x = reorder(enginelocation,price), y = price, fill = enginelocation) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x = "enginelocation") +
+ theme_gray() + 
+ theme(legend.position = "none",
+       axis.text = element_text(size = 15),
+       axis.title = element_text(size=15)) 
+
+
+pl2 <- ggplot(car_price_assignment) +
+ aes(x = reorder(fueltype, price), y = price, fill = fueltype) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ theme_gray() +
+ labs(x = "fueltype") + 
+ theme(legend.position = "none",
+       axis.text = element_text(size = 15),
+       axis.title = element_text(size=15)) 
+
+grid.arrange(ncol = 2, nrow = 1,pl1,pl2)
+```
+There is a significant relationship between the price and the location of the engine, there seems to be no relationship with the type of fuel.
+
+```{r}
+pl3 <- ggplot(car_price_assignment) +
+ aes(x = aspiration, y = price, fill = aspiration) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ theme_gray() + 
+ theme(legend.position = "none",
+       axis.text = element_text(size = 15),
+       axis.title = element_text(size=15)) 
+
+pl4 <- ggplot(car_price_assignment) +
+ aes(x = doornumber, y = price, fill = doornumber) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ theme_gray() + 
+ theme(legend.position = "none",
+       axis.text = element_text(size = 15),
+       axis.title = element_text(size=15)) 
+
+grid.arrange(ncol = 2, nrow = 1,pl3,pl4)
+```
+There does not seem to be a significant relationship between the price and the type of engine intake, or with the number of doors.
+
+```{r}
+pl5 <- ggplot(car_price_assignment) +
+ aes(x = reorder(carbody,price), y = price, fill = carbody) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x = "carbody") + 
+ theme_gray() + 
+ theme(legend.position = "none",
+       axis.text = element_text(size = 15),
+       axis.title = element_text(size=15)) 
+
+
+pl6 <- ggplot(car_price_assignment) +
+ aes(x = reorder(drivewheel,price), y = price, fill = drivewheel) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x = "drivewheel") +
+ theme_gray() + 
+ theme(legend.position = "none",
+       axis.text = element_text(size = 15),
+       axis.title = element_text(size=15))  
+
+grid.arrange(ncol = 2, nrow = 1,pl5,pl6)
+```
+There is a significant relationship between the price and the shape of the vehicle, as well as the type of wheel drive.
+
+```{r}
+pl7 <- ggplot(car_price_assignment) +
+ aes(x = reorder(fuelsystem,price), y = price, fill = fuelsystem) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x = "fuelsystem")  +
+ theme_gray() + 
+ theme(legend.position = "none",
+       axis.text = element_text(size = 15),
+       axis.title = element_text(size=15)) 
+
+pl8 <- ggplot(car_price_assignment) +
+ aes(x = reorder(enginetype,price), y = price, fill = enginetype) +
+ geom_boxplot() +
+ scale_fill_hue() +
+ labs(x = "enginetype") +
+ theme_gray() + 
+ theme(legend.position = "none",
+       axis.text = element_text(size = 15),
+       axis.title = element_text(size=15))  
+
+
+grid.arrange(ncol = 2, nrow = 1,pl7,pl8)
+```
+There is a significant relationship between the price and the form or type of fuel injection to the engine, as well as the type of engine.
+
+## Analyzing Independent variable Vehicle Price
+```{r}
+#Boxplot of price
+
+pl9 <- ggplot(car_price_assignment) +
+ aes(x = "", y = price) +
+ geom_boxplot(fill = "#00B9E3") +
+ labs(x = "Price", y ="Value") + 
+ theme_bw() + 
+ theme(legend.position = "none",
+       axis.text = element_text(size = 15),
+       axis.title = element_text(size=15))
+ 
+
+#Histogram of price
+
+pl10 <- ggplot(data = car_price_assignment, aes(x = price)) +
+  geom_histogram(bins = 50,aes(y = ..density.., fill = ..count..)) +
+  scale_fill_gradient(low = "#DCDCDC", high = "#00B9E3") +
+  stat_function(fun = dnorm, colour = "red",
+                args = list(mean = mean(car_price_assignment$price),
+                            sd = sd(car_price_assignment$price))) +
+  ggtitle("Histogram with theorical normal dist. curve") +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.text = element_text(size = 15),
+        axis.title = element_text(size=15))  
+
+grid.arrange(ncol = 2, nrow = 1,pl9,pl10)
+```
+```{r}
+summary(car_price_assignment$price)
+```
+The histogram shows a large skew of the data to the right, which means that most of the prices in the dataset are low. There is a significant difference between the mean and the median. The price distribution is widely separated from the average, indicating a high variation (75% of prices are below 16,500, while the remaining 15% are between 16,500 and 45,400).
+
+## Insights found so far
+
+
+    A high correlation is observed in the pair of features: "citympg" - "highwaympg", possibly indicating a collinearity problem.
+
+    The features: boreratio, carlength, carwidth, curbweight, cylindernumber, enginesize, horsepower and wheelbase, have a significant and positive relationship with the price of the vehicle.
+
+    There are features with little or no influence on the price of the vehicle such as carheight, compressionration, peakrpm, stroke and symboling.
+
+    Although the citympg and highwaympg variables are negatively related to the value of the Vehicle, they are not independent variables that influence its price, instead, they are dependent variables of the same fatures of the dataset that increase the price of the vehicle. That is why larger, heavier and more powerfull vehicles, in addition to having a higher cost, have lower fuel efficiency, therefore these variables are not considered independent themselves and will be discarded.
+
+    The high skew to the right and outliers in the price variable, indicates some type of transformation is necessary to adjust it to a normal distribution.
+
+    There are a significant relationship between the features "enginelocation", "carbody", "drivewheel", "fuelsystem", "enginetype" and price of vehicle.
+
+    There are not relationship between the features "fueltype", "aspiration", "doornumber" and price of vehicle.
+
+Bar plot of numerical variables with the best predictive capacity based on their correlation, they will to be used in the multivariate linear model.
+
+```{r}
+# Positive and negatively influencing features in the price variable
+
+df <-
+  subset(
+    car_price_assignment,
+    select = c("wheelbase","carlength","carwidth", "carheight", "curbweight", "cylindernumber", "enginesize",
+      "boreratio", "stroke", "compressionratio", "horsepower", "peakrpm", "price")
+  )
+
+corr_car_data <-
+  as.data.frame(t(cor(car_price_assignment$price, df, method = "pearson")))
+
+corr_car_data$key <- rownames(corr_car_data)
+
+ggplot(data = corr_car_data) +
+  aes(x = reorder(key, V1),
+      y = V1,
+      fill = key) +
+  geom_bar(stat = "identity") +
+  ylab("Correlation") +
+  xlab("Feature") +
+  ggtitle("Numerical features with better predictive capacity") +
+  theme(legend.position = "none",
+        title = element_text(size = 20),
+        axis.text = element_text(size = 15),
+        axis.title = element_text(size=15))  +
+  coord_flip()
+```
+
+Scatter plot of continuous features with best prediction the price of the vehicle
+```{r}
+# Scatter plot with better prediction of price value
+fig(19,10)
+df <-
+  subset(
+    car_price_assignment,
+    select = c(
+      "wheelbase","carlength","carwidth", "curbweight", "cylindernumber", "enginesize",
+      "boreratio", "horsepower", "price"
+    )
+  )
+
+plot_scatterplot(df, by ="price", ncol = 4L, nrow = 2L,
+                 geom_point_args = list("stroke" = 0.1, "colour" = "blue"),
+                 theme_config = list(text = element_text(size=18),
+                                 axis.text.y = element_text(size = 15),
+                                 axis.text.x = element_text(size = 15)))
+```
+## Experimental Design.
+We will intend to verify if a multivariate linear regression can predict the price of vehicles, based on the selected or most favorable features of the dataset studied according to the model:
+price=α+β1x1+β2x2+β3x3+⋯+βpxp
+
+Where xp
+
+are the explanatory variables that best predict the price
+
+Para ello y basado en los hallazgos encontrados se realizaran las siguientes pasos:
+
+    Transformation of the dependent variable "price"
+
+    Determine favorable categorical variables through a single-factor design with fixed effects.
+
+    Using simple regression, determine which continuous variables have predictive capacity on the price of the vehicle.
+
+    Using multiple regression, determine the best linear equation that predicts the price of vehicles, using the selected features.
+
+    Diagnosis and validation of the linear model obtained.
+
+## Transformation of the dependent variable "price"
+```{r}
+# Logaritmic transformation of the variable price
+
+car_price_assignment$TRF_price <- log10(car_price_assignment$price)
+```
+```{r}
+#Boxplot
+
+pl11 <- ggplot(car_price_assignment) +
+ aes(x = "", y = TRF_price) +
+ geom_boxplot(fill = "#00B9E3") +
+ labs(x = "Transformed Price", y ="Value") +
+ theme_bw() + 
+ theme(legend.position = "none",
+        axis.text = element_text(size = 15),
+        axis.title = element_text(size=15)) 
+
+#Histogram
+
+pl12 <- ggplot(data = car_price_assignment, aes(x = TRF_price)) +
+  geom_histogram(bins = 50,aes(y = ..density.., fill = ..count..)) +
+  scale_fill_gradient(low = "#DCDCDC", high = "#00B9E3") +
+  stat_function(fun = dnorm, colour = "red",
+                args = list(mean = mean(car_price_assignment$TRF_price),
+                            sd = sd(car_price_assignment$TRF_price))) +
+  ggtitle("Transformed Histogram with theorical normal dist. curve") +
+  theme_bw() +
+  theme(legend.position = "none",
+        title = element_text(size = 20),
+        axis.text = element_text(size = 15),
+        axis.title = element_text(size=15)) 
+
+grid.arrange(ncol = 2, nrow = 1,pl11,pl12)
+```
+# Q-Q plot comparision
+```{r qqplot compare}
+
+par(mfrow=c(1,2))
+
+qqnorm(car_price_assignment$price, pch = 19, col = "gray50",main = "Normal Q-Q Plot  price")
+qqline(car_price_assignment$price)
+
+qqnorm(car_price_assignment$TRF_price, pch = 19, col = "gray50", main = "Normal Q-Q Plot  TRF_Price")
+qqline(car_price_assignment$TRF_price)
+```
+Although the vehicle price variable after the transformation does not follow a normal distribution, it is much closer and the outliers have been eliminated, with this simple logarithmic transformation.
+
+## Single-factor design with fixed effects.
+
+Analysis of variance (ANOVA) will be applied to all the categorical variables of the dataset with levels greater than 2 (K > 2), to determine their predictive capacity.
+
+We are interested to know if the means of the vehicle´s price are the same in each levels or treatments of each discrete variable (or factor), according to the following hypothesis test:
+{H0: μ1=μ2=μ3=μ4=μi=μjH1: μi≠μj           for some   i≠j
+
+That is, H0: contrasts that the variable cannot predict a clear trend in the price of the vehicle, because there are no differences in the means of the levels, compared to the alternative H1: that at least one mean differs from the other.
+
+    The variable of interest or dependent variable, is the price of the vehicle.
+    The factor: The categorical variables of the dataset with more than 2 levels.
+    Factor levels: all treatments or levels within each discrete variable
+    Model unbalanced: the levels do not have the same number of elements.
+
+For categorical variables with only k = 2 levels, the Student's t test is used. Likewise with the same hypothesis test:
+{H0: μ1=μ2H1: μ1≠μ2
+T-Student test.
+
+Categorical variables with only 2 levels: enginelocation, fueltype, aspiration, doornumber.
+
+```{r}
+# Enginelocation
+
+t1 <- car_price_assignment %>% filter(enginelocation == "front")
+t2 <- car_price_assignment %>% filter(enginelocation == "rear")
+
+t.test(t1$TRF_price,t2$TRF_price)
+```
+The p-value is <0.05 and the 95% confidence interval does not include zero, we can affirm that the samples differ in their means, the variable "enginelocation" has predictive capacity.
+
+```{r fuel type}
+# fueltype
+
+t3 <- car_price_assignment %>% filter(fueltype == "gas")
+t4 <- car_price_assignment %>% filter(fueltype == "diesel")
+
+t.test(t3$TRF_price,t4$TRF_price)
+```
+The p-value is >0.05 and the 95% confidence interval does include zero, we can not confirm the samples differ in their means, the variable "fueltype" has not predictive capacity and it is discarded.
+
+```{r aspiration}
+# aspiration
+
+t5 <- car_price_assignment %>% filter(aspiration == "std")
+t6 <- car_price_assignment %>% filter(aspiration == "turbo")
+
+t.test(t5$TRF_price,t6$TRF_price)
+```
+The p-value is <0.05 and the 95% confidence interval does not include zero, we can affirm that the samples differ in their means, the variable "aspiration" has predictive capacity.
+
+```{r door number}
+# doornumber
+
+t7 <- car_price_assignment %>% filter(doornumber == "four")
+t8 <- car_price_assignment %>% filter(doornumber == "two")
+
+t.test(t7$TRF_price,t8$TRF_price)
+```
+The p-value is >0.05 and the 95% confidence interval does include zero, we can not confirm the samples differ in their means, the variable "doornumber" has not predictive capacity and it is discarded.
+
+## ANOVA test
+Categorical features with 2 or more levels: carbody, drivewheel, enginetype, fuelsystem.
+
+```{r fuel system}
+anova_fuel <- aov(car_price_assignment$TRF_price ~ car_price_assignment$fuelsystem)
+summary(anova_fuel)
+```
+  Verified the p-value is very small, in addition, the contrast statistic F is greater than 1, therefore, there is sufficient evidence to conclude that the means in the price of the vehicle are not equal (or at least in one of the them), for the different levels of the variable "fuelsystem".
+    And, consequently, the type of injection of a vehicle can influence the price of the car.
+
+```{r engine type}
+# enginetype
+
+anova_engine <- aov(car_price_assignment$TRF_price ~ car_price_assignment$enginetype)
+summary(anova_engine)
+```
+  Verified the p-value is very small, in addition, the contrast statistic F is greater than 1, therefore, there is sufficient evidence to conclude that the means in the price of the vehicle are not equal (or at least in one of the them), for the different levels of the variable "enginetype".
+    And, consequently, the engine type of a vehicle can influence the price of the car.
+
+```{r drivewheel}
+# drivewheel
+
+anova_drivewheel <- aov(car_price_assignment$TRF_price ~ car_price_assignment$drivewheel)
+summary(anova_drivewheel)
+```
+    Verified the p-value is very small, in addition, the contrast statistic F is greater than 1, therefore, there is sufficient evidence to conclude that the means in the price of the vehicle are not equal (or at least in one of the them), for the different levels of the variable "drivewheel".
+    And, consequently, the traction type of a vehicle can influence the price of the car.
+
+```{r body}
+# carbody
+
+anova_body <- aov(TRF_price ~ carbody, data = car_price_assignment)
+summary(anova_body)
+```
+    Verified the p-value is very small, in addition, the contrast statistic F is greater than 1, therefore, there is sufficient evidence to conclude that the means in the price of the vehicle are not equal (or at least in one of the them), for the different levels of the variable "carbody".
+    And, consequently, the shape of a vehicle can influence the price of the car.
+
+# Statistically significant categorical variables in predicting the price of the vehicle:
+"enginelocation","aspiration", "fuelsystem", "enginetype", "carbody", "drivewheel"
+
+## Simple Linear Regression
+
+imple linear regression will be applied to all continuous variables in the dataset in order to determine their predictive capability.
+
+A regression model is generated to explain the linear relationship between the value of the vehicle and each continuous feature present in the dataset.
+
+The main objective is to perform a hypothesis test on the slope of the regression line  beta
+
+, to know if there is a linear relationship between the feature under test and the price of the vehicle.
+
+Hypothesis definition:
+{H0: β=0H1: β≠0
+
+Where:
+
+Null Hypothesis: In the population from sample, there is no linear relationship between the price of the vehicle and the study feature H0:β=0
+
+Altenative Hypothesis: In the population from sample, there is a linear relationship between the price of the vehicle and the study feature H1:β≠0
+
+If the null hypothesis is rejected, the feature under test is linearly related to the dependent variable price of the vehicle.
+
+To quantify the magnitude of the association between price and the test variable, the 95% confidence interval for the slope of the regression line is revised.
+
+Continuous features: "symboling", "wheelbase", "carlength", "carwidth", "carheight", "curbweight", "cylindernumber", "enginesize", "boreratio", "stroke", "compressionratio", "horsepower", "peakrpm"
+
+```{r}
+# Continuous variables under test
+
+nombre_col <- c("symboling",  "wheelbase",
+                "carlength",  "carwidth",
+                "carheight",  "curbweight",
+                "cylindernumber", "enginesize",
+                "boreratio",  "stroke",
+                "compressionratio", "horsepower", "peakrpm" )
+```
+```{r}
+# empty dataframe
+
+df <-
+  structure(
+    list(
+      Variable = character(),
+      Intercept = numeric(),
+      beta = numeric(),
+      t_value = numeric(),
+      p_value = numeric(),
+      IC_2.5 = numeric(),
+      IC_95 = numeric(),
+      R_squared = numeric()
+    ),
+    class = "data.frame"
+  )
+
+# Extraction and tabulation of the most important values of the simple regression of each continuous variable.
+
+for (i in nombre_col) {
+  
+  regresion <- lm(car_price_assignment$TRF_price ~ car_price_assignment[[i]])
+  sumario <- summary(regresion)
+  confianza <-  confint(regresion, level = 0.95)
+  
+  vector <-
+    data.frame(
+      Variable = i,
+      Intercept = round(sumario$coefficients[1], 2), beta = round(sumario$coefficients[2], 4),
+      t_value = round(sumario$coefficients[6], 2), p_value = sumario$coefficients[8],
+      IC_2.5 = round(confianza[2, 1], 4), IC_95 = round(confianza[2, 2], 4),
+      R_squared = sumario$r.squared
+    )
+  df <- rbind(df,vector)
+}
+```
+```{r}
+# Features with no linear relationship
+
+df %>% filter(p_value > 0.05)
+```
+With a contrast p-value greater than 0.05, and a confidence interval that includes zero, we can conclude that we do not have sufficient statistical evidence to reject the null hypothesis, that is:
+
+It can be stated that there is no statistically significant linear relationship between the price of the vehicle and the variables:
+
+"symboling", "stroke", "compressionratio", "peakrpm", so they will be discarded from the model.
+```{r}
+# Features with linear relationship
+
+df %>% filter(p_value < 0.05)
+```
+
+
+With a contrast p-value less than 0.05, and a confidence interval that not includes zero, we can conclude that we do have sufficient statistical evidence to reject the null hypothesis, that is:
+
+It can be stated that there is a statistically significant linear relationship between the price of the vehicle and the features:
+
+"wheelbase", "carlength", "carwidth", "curbweight", "cylindernumber", "enginesize", "boreratio" y "horsepower"
+
+The determination coefficient "R_squared" values of these variables are the highest, indicating these features of the dataset have the best explicability of the price of the vehicle.
+```{r}
+# Variable Carheight
+
+regresion <- lm(car_price_assignment$TRF_price ~ car_price_assignment$carheight)
+summary(regresion)
+confint(regresion, level = 0.95)
+```
+The variable "Carheight" is not statistically significant, and it will not be included in the final model, since it is at the limit of statistical significance (P-value = 0.02), in addition, the coefficient of determination R2 just explains 2.6% of the price.
+
+## Multivariable Linear Regression
+
+We are going to identify which features of those already selected, are linearly associated with the variable price of the vehicle, now taking into account the simultaneous effect they have on each other.
+
+We will use step method and direction backward.
+
+```{r}
+# Remove discarded variable from model
+
+desechadas <- c("symboling", "stroke", "carheight", "compressionratio", "peakrpm",
+    "fueltype", "doornumber", "citympg", "highwaympg", "price")
+
+# Data frame with significant variables for the model
+
+CarPrice_predictoras <- car_price_assignment[ , !(names(car_price_assignment) %in% desechadas)]
+
+# Linear model with accepted predictor variables
+
+modelo <- lm(TRF_price ~., data = CarPrice_predictoras)
+summary(modelo)
+```
+The model with all the variables selected as best predictors, has a high adjusted R2
+
+(0.9085). It is able to explain 90.85% of the variability observed in the price of vehicles.
+
+The p-value of the model is significant (<0.05), as well as, the contrast statistic F, therefore it can be accepted that the relationship is not random; at least one of the regression coefficients is nonzero.
+
+The next step is to build a "backwards" model, to select the best set of predictors.
+
+```{r}
+# Model Backward
+
+modelo_backward <- step(object =modelo, direction = "backward", trace = 1)
+summary(modelo_backward)
+```
+he backward model has marginally improved the coefficient of determination R2 to 0.9096, has increased the test statistic F to 83.1, in addition to reducing the number of predictor variables to 10:
+```{r}
+# Best lineal model until now.
+
+modelo_backward$call
+```
+However, there are two not significant predictors, "enginesize" and "boreratio",their p-value > 0.05, an indication they may not contribute to the model.
+
+Regression will be performed again eliminating these 2 features.
+```{r}
+# Remove discarded variable from model
+# New removed features: enginesize y boreratio
+
+desechadas <- c("symboling", "stroke", "carheight", "compressionratio", "peakrpm", "fueltype", "doornumber","citympg", "highwaympg", "price", "enginesize", "boreratio")
+
+# Data frame with significant variables for the model
+
+CarPrice_predictoras <- car_price_assignment[ , !(names(car_price_assignment) %in% desechadas)]
+
+# New backward model with less variables
+
+modelo <- lm(TRF_price ~., data = CarPrice_predictoras)
+
+modelo_backward2 <- step(object =modelo, direction = "backward", trace = 1)
+(sumario2 <- summary(modelo_backward2))
+```
+This model with the best predictor features, has a high adjusted R2
+
+(0.9098). It is able to explain 90.98% of the variability observed in the price of vehicles.
+
+The p-value of the model is significant ( <0.05), as well as the test statistic F, therefore it can be accepted that the relationship is not random.
+
+We can say, this model is good at predicting the price of cars, using the following predictor variables:
+
+    carbody
+    drivewheel
+    enginelocation
+    carwidth
+    curbweight
+    enginetype
+    cylindernumber
+    fuelsystem
+    horsepower
+
+## Diagnosis and validation of the linear model obtained.
+Multicollinearity test:
+
+```{r}
+#  Multicollinearity test
+
+vif(modelo_backward2)
+```
+There are variables with values greater than 10, a clear indication of multicollinearity. Regression will be carried out again, eliminating the variable with the highest index and verifying the behavior of the new model.
+```{r}
+# Remove discarded variable from model
+# New removed feature: enginetype
+
+desechadas <- c("symboling", "stroke", "carheight", "compressionratio", "peakrpm", "fueltype",
+    "doornumber", "citympg", "highwaympg", "price", "enginesize", "boreratio", "enginetype" )
+
+# Data frame with significant variables for the model
+
+CarPrice_predictoras <- car_price_assignment[ , !(names(car_price_assignment) %in% desechadas)]
+
+
+# New backward model with less variables
+
+modelo <- lm(TRF_price ~., data = CarPrice_predictoras)
+
+modelo_backward3 <- step(object =modelo, direction = "backward", trace = 1)
+(sumario3 <- summary(modelo_backward3))
+```
+This new model has a high adjusted R2
+
+= 0.8960. It is able to explain 89.6% of the variability observed in the price of vehicles. With just a decrease of 1.369 % of the coefficient of determination and a very significant improvement in the test statistic F = 176.90.
+
+The p-value of the model is significant ( <0.05), as well as the test statistic F, therefore it can be accepted that the relationship is not random.
+```{r}
+#  Multicollinearity test
+
+vif(modelo_backward3)
+```
+Multicollinearity is not observed in the new set of predictive variables.
+
+Therefore, we can say, this model is good enough to predict the price of cars, using the following predictive variables:
+
+    carbody
+    drivewheel
+    enginelocation
+    carwidth
+    curbweight
+    horsepower
+
+An equation that defines the linear model achieved would be:
+log(price)=2.0572−0.1057⋅carbodyhardtop−0.1202⋅carbodyhatchback−0.0763⋅carbodysedan−0.1346⋅carbodywagon−0.0165⋅drivewheelfwd+0.0327⋅drivewheelrwd+0.2608⋅enginelocationrear+0.0229⋅carwidth+0.0001⋅curbweight+0.0014⋅horsepower
+Tools to check model assumptions
+
+    Q-Q graph of standardized residuals
+    Heteroscedasticity graph
+    Graph of Cook's distances against fitted values
+    Graph of residuals against adjusted values
+
+```{r}
+par(mfrow=c(2,2))
+plot(modelo_backward3, col =c("#00B9E3"))
+```
+```{r}
+ggplot(data = modelo_backward3, aes(x = modelo_backward3$residuals)) +
+  geom_histogram(bins = 50,aes(y = ..density.., fill = ..count..)) +
+  scale_fill_gradient(low = "#DCDCDC", high = "#00B9E3") +
+  stat_function(fun = dnorm, colour = "red",
+                args = list(mean = mean(modelo_backward3$residuals),
+                            sd = sd(modelo_backward3$residuals))) +
+  ggtitle("Residuals histogram with theorical normal dist. curve") +
+  theme_bw() +
+  theme(title = element_text(size = 20),
+        axis.text = element_text(size = 15),
+        axis.title = element_text(size=15))
+```
+```{r}
+# Normality test
+
+lillie.test(x = modelo_backward3$residuals)
+```
+The null hypothesis of normality of the residuals is rejected.
+
+```{r}
+# Homoscedasticity test
+
+bptest(modelo_backward3)
+```
+The null hypothesis of homocedasticity of the residuals is rejected.
+
+```{r}
+# Detection and visualization of outliers
+
+outlierTest (modelo_backward3)
+influencePlot(modelo_backward3,col =c("#00B9E3") )
+```
+
+Conclusions:
+
+With the results obtained, the following model goodness validations can be concluded:
+
+    An even distribution around 0 of the residuals is observed compared to the values adjusted by the model, the QQ plot reflects, there are indications of a lack of normality in the residuals, only of higher value, corroborated by the Lilliefors hypothesis test ( Kolmogorov-Smirnov) who rejects the normality of the residuals.
+
+    In the same way, we verified the residuals are distributed uniformly at random around the x = 0 axis and do not form specific groups or clusters, this is an indication of the independence of the predictive variables against the dependent variable.
+
+    On the contrary, the Breusch-Pagan test provides evidence of lack of homoscedasticity.
+
+    Observations 13,17 and 168 seem to have a high level of influence, they can be considered as influential outliers.
+
+    The set of chosen predictors did not present variance inflation after their last adjustment.
+
+    Due to big disparity between the largest and smallest values of the independent variable, there is also a greater risk of presenting heteroscedasticity. The vehicle price variable was highly skewed to the left, although a transformation was carried out to normalize its distribution.
+
+    The main objective of the study is fulfilled but, with conditions, it has been determined that several features in the dataset can linearly predict the price of a vehicle, however, due to the nature of the distribution of the price values in the dataset, it is likely that a quadratic expression will define better its behavior.
+
+Graph that shows the regression line obtained vs. the transform of the price, the size and color of the points, indicate the magnitude of the residuals; blue and small are values with better prediction and closer to the regression line, red and larger are values with less prediction. The size of the residual is the length of the small vertical lines, from each point to where it meets the regression line.
+
+```{r}
+CarPrice_predictoras$regresion <- predict(modelo_backward3)           # Save vector of regression values
+CarPrice_predictoras$residuos <- residuals(modelo_backward3)          # Save residuals
+ggplot(CarPrice_predictoras, aes(x = regresion, y = TRF_price)) +
+  geom_smooth(method = "lm", se = FALSE, color = "lightgrey") +       # regression line  
+  geom_segment(aes(xend = regresion, yend = regresion), alpha = .2) + # vertical lines of residual
+  geom_point(aes(color = abs(residuos), size = abs(residuos))) +      # size of points
+  scale_color_continuous(low = "#00B9E3", high = "red") +             # color of the points mapped by residue size
+  guides(color = FALSE, size = FALSE) +                               
+  geom_point(aes(y = regresion), shape = 1) +
+  ggtitle("Regression line obtained vs transformed of the price") +
+  theme_gray() +
+  theme(title = element_text(size = 20),
+        axis.text = element_text(size = 15),
+        axis.title = element_text(size=15))
+```
+
+
+
