@@ -1,0 +1,92 @@
+---
+title: "Aggregating and Formatting Data"
+author: "Sokpheanal Huynh"
+date: "rev 2023-04-10"
+output: html_document
+---
+
+# Instructions
+
+In class we reviewed methods for collecting data from more than one source.
+
+Please perform the following:
+
+*   [X] Display the aggregated data as a table.
+
+# Results
+The Dallas Cowboys had the highest number of wins in the 1971-1972 season.
+
+# Code
+
+```{r load files}
+games_hw <- read.csv("Aggregating and Formatting Data (1).csv")
+teams_hw <- read.csv("Aggregating and Formatting Data (2).csv")
+str(teams_hw)
+#teams_hw
+str(games_hw)
+#games_hw
+```
+```{r combine the files, message = F, warning = F}
+library(dplyr)
+(t1_hw <-
+  games_hw %>%
+  select(id = Winner.tie))
+
+#Winning team table
+(t1_hw <-
+   t1_hw %>%
+   left_join(teams_hw, by = c('id' = 'id')))
+```
+
+```{r Calculate the number of wins per team}
+(total_win_by_team <-
+  t1_hw %>%
+  group_by(teams) %>%
+    summarise(
+      total_win = n()))
+```
+```{r rank the teams}
+(total_win_by_team_ranked <-
+   total_win_by_team %>%
+   mutate(rank = dense_rank(desc(total_win))) %>%
+   arrange(rank))
+
+#rearrange the columns position
+(total_win_by_team_ranked <-
+    total_win_by_team_ranked %>%
+    relocate(rank, .before = total_win))
+
+#Updating column names to match prompt
+colnames(total_win_by_team_ranked) <- c('Teams', 'Rank', 'Total Wins')
+```
+```{r write data to csv}
+write.csv(total_win_by_team_ranked, "C:/Users/sokpheanal.huynh/OneDrive - Envestnet/ANLY560/AggregatingAndFormattingHomeworkResults.csv", row.names=TRUE)
+```
+
+
+# Tasks
+Load your data and create a knitted() table.
+
+* Display the team and their rank
+
+# Steps
+
+* Load both files
+* Combine the files
+* Calculate the number of wins per team
+* Rank the teams
+* Save the results
+
+# Results
+Load the data from your saved file. Display the results as in the example below, with the best team on top.
+
+```{r install and library kable, echo = F, message = F}
+library(kableExtra)
+library(knitr)
+```
+```{r table, echo = F}
+(total_win_by_team_ranked %>%
+   kbl() %>%
+   row_spec(0, align = 'c') %>%
+   kable_styling())
+```
