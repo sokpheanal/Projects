@@ -1,0 +1,128 @@
+---
+title: "Can I Make Money?"
+author: "Sokpheanal Huynh"
+date: "2023-06-14"
+output: html_document
+---
+Functions
+```{r}
+1+2+3+4
+
+t1 <- c(1,2,3,4)
+sum(t1)
+t2 <- c(10,20,30,40,50)
+sum(t2)
+
+my_sum <- function(x) {
+  res <- 0
+  for (i in x) {
+    res <- res + i
+  }
+  res
+}
+```
+
+```{r}
+t1 <- c(1,2,3,4)
+r1 <- my_sum(t1)
+sum(t1) == my_sum(t1)
+r1 == 10
+```
+Monte-Carlo Simulations
+```{r}
+set.seed(0)
+n <- 100
+x <- rnorm(n = n, mean = 0, sd = 1)
+shapiro.test(x)
+```
+Do it 10k times!
+
+```{r}
+times <- 10000
+res <- rep(NA, times = times)
+for(i in 1:times) {
+  x <- rnorm(n = n, mean = 0, sd = 1)
+  x <- shapiro.test(x)
+  res[i] <- x$p.value < 0.05
+}
+
+round(100*sum(res)/times, 2)
+```
+```{r}
+set.seed(0)
+n <- c(30,40,75,100,150,200)
+trials <- 1:100000
+grid <- expand.grid(n = n, trials = trials, res = NA)
+
+for(i in 1:nrow(grid)){
+  x <- rnorm(n = grid$n[i], mean = 0, sd = 1)
+  x <- shapiro.test(x)
+  grid$res[i] <- x$p.value < 0.05
+}
+
+library(dplyr)
+
+grid %>%
+  group_by(n) %>%
+  summarise(rate = 100*sum(res)/n())
+```
+
+60% acc
+$100 loss
+$90 win
+
+```{r}
+(.6)*50 +(1-.6)*-100
+(.6)*x +(1-.6)*-100 = 0
+(.6)*x = (1-.6)*100
+x = (1-.6)*100/(.6)
+```
+```{r}
+acc <- .6
+break_even <- function(acc) {
+  (1-acc)*100/acc
+}
+break_even(.6)
+
+acc <- seq(from = .51, to = .99, by = .01)
+data <- data.frame(acc = acc, break_even = break_even(acc))
+
+library(ggplot2)
+
+ggplot(data, aes(x = acc, y = break_even)) + 
+  theme_bw() +
+  geom_line()
+```
+```{r}
+bank <- 1000
+acc <- seq(from = .51, to = .99, by = .01)
+games <- 280
+winnings <- seq(from = 1, to = 100, by = 5)
+bet <- 100
+seasons <- 100
+
+break_even_theory <- function(acc) { ((1-acc) *100/acc)}
+break_even_sim <- function(seasons, games, bank, bet, win, acc) {
+  grid <- data.frame(season = 1:seasons, final_bank = NA)
+  for(i in 1:nrow(grid)) {
+    for(j in 1:games) {
+      if(bank - bet <= 0) {
+        grid$final_bank[i] <- bank 
+        break
+      }
+      bank <- bank - bet
+      was_i_correct <- sample(c(T, F), size = 1, prob = c(acc, 1-acc))
+      if(was_i_correct) {
+        bank <- bank + win
+      }
+    }
+  }
+  mean(grid$final_bank, na.rm = T)
+} 
+
+break_even_sim(1000,280, 1000, 100, 80, .6)
+
+grid <- expand.grid(acc = acc, winnings = winnings, res = NA)
+grid$theory <- break_even_theory(acc)
+```
+
