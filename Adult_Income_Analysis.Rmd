@@ -1,0 +1,485 @@
+---
+title: "ANLY 502 Final Project Report"
+author: ""
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Title: 1994 Adult Census Income Dataset Analysis
+
+# Project Topic:
+The data set contains the 1994 census data with 14 variables and over 48000 records. The data extraction was done by Barry Becker in 1994 and donated by Ronny Kohavi and Barry Baker. The variable ranges from individuals’ education level, marital status, race etc., all of which may or may not have any effect on individuals’ income. There has been some data manipulation by the provider of the data set. The file format is text, comma delimited.
+
+# Team Member: Sokpheanal Huynh
+
+# Dataset Description:
+The data set were divided into two files; adult.data - the training dataset and adult.test - a testing dataset.
+The total number of records combined from the two datasets is 48,842 rows.
+
+## Link to the dataset:https://archive.ics.uci.edu/ml/datasets/Adult
+
+## The dataset has 14 explanatory variables and 1 target variable:
+1. age: age of the individual - continuous.
+2. workclass: Private, Self-emp-not-inc, Self-emp-inc, Federal-gov, Local-gov, State-gov, Without-pay, Never-worked - categorical
+3. fnlwgt: a weight value the Census Bureau used - continuous.
+4. education: Bachelors, Some-college, 11th, HS-grad, Prof-school, Assoc-acdm, Assoc-voc, 9th, 7th-8th, 12th, Masters, 1st-4th, 10th, Doctorate, 5th-6th, Preschool - categorical
+5. education-num: number of years of education - continuous.
+6. marital-status: Married-civ-spouse, Divorced, Never-married, Separated, Widowed, Married-spouse-absent, Married-AF-spouse - categorical
+7. occupation: Tech-support, Craft-repair, Other-service, Sales, Exec-managerial, Prof-specialty, Handlers-cleaners, Machine-op-inspct, Adm-clerical, Farming-fishing, Transport-moving, Priv-house-serv, Protective-serv, Armed-Forces - categorical
+8. relationship: Wife, Own-child, Husband, Not-in-family, Other-relative, Unmarried - categorical
+9. race: White, Asian-Pac-Islander, Amer-Indian-Eskimo, Other, Black - categorical
+10. sex: Female, Male - categorical
+11. capital-gain: amount of capital gain - continuous
+12. capital-loss: amount of capital loss - continuous
+13. hours-per-week: number of hours worked a week - continuous.
+14. native-country: United-States, Cambodia, England, Puerto-Rico, Canada, Germany, Outlying-US(Guam-USVI-etc), India, Japan, Greece, South, China, Cuba, Iran, Honduras, Philippines, Italy, Poland, Jamaica, Vietnam, Mexico, Portugal, Ireland, France, Dominican-Republic, Laos, Ecuador, Taiwan, Haiti, Columbia, Hungary, Guatemala, Nicaragua, Scotland, Thailand, Yugoslavia, El-Salvador, Trinadad&Tobago, Peru, Hong, Holand-Netherlands - categorical
+15. income: >50K, <=50k - categorical
+
+# Question:
+
+H0: People with a higher education degree (at least 14 years of education) earn above $50,000. 
+HA: People with a higher education degree (at least 14 years of education) do not earn above $50,000.
+
+#Tools:
+R was used for the project. We employed R, and a number of its functions to load the data, perform data wrangling, and statistical data analysis.
+
+# Load the data:
+```{r load data}
+#Reading the training data
+adult.income.data.trained <- read.csv("adult.data.csv")
+#Reading the testing data
+adult.income.data.test <- read.csv("adult.test.csv",
+                                   header = FALSE)
+str(adult.income.data.test)
+str(adult.income.data.trained)
+#Adding column names to the testing dataset
+colnames(adult.income.data.test) <- c("age",
+                                      "workclass",
+                                      "fnlwgt",
+                                      "education",
+                                      "education_num",
+                                      "marital_status",
+                                      "occupation",
+                                      "relationship",
+                                      "race",
+                                      "sex",
+                                      "capital_gain",
+                                      "capital_loss",
+                                      "hours_per_week",
+                                      "native_country",
+                                      "income")
+#Adding column names to the training dataset
+colnames(adult.income.data.trained) <- c("age",
+                                         "workclass",
+                                         "fnlwgt",
+                                         "education",
+                                         "education_num",
+                                         "marital_status",
+                                         "occupation",
+                                         "relationship",
+                                         "race",
+                                         "sex",
+                                         "capital_gain",
+                                         "capital_loss",
+                                         "hours_per_week",
+                                         "native_country",
+                                         "income")
+#Combining the two datasets
+adult_data <- rbind(adult.income.data.test, adult.income.data.trained)
+summary(adult_data)
+```
+# Load the necessary packages
+```{r load packages}
+library(dplyr)
+library(sqldf)
+library(ggplot2)
+library(reshape2)
+library(gridExtra)
+library(stringr)
+library(DATA606)
+```
+
+# Data Analysis
+
+## Exploring the workclass explanatory variable
+###Manipulate the income variable
+```{r income data manipulation}
+#Removing leading spaces in workclass column
+adult_data$workclass <- str_squish(adult_data$workclass)
+#Removing spaces and period for the target variable data string
+adult_data$income <- ifelse(adult_data$income == ' <=50K.',
+                            '<=50k',
+                            as.character(adult_data$income))
+adult_data$income <- ifelse(adult_data$income == ' >50K.', 
+                            '>50k', 
+                            as.character(adult_data$income))
+#Categorizing the target variable: >50k is 1, and <= 50k is 0
+adult_data$income <- ifelse(adult_data$income == '>50k', 
+                            1, 
+                            0)
+adult_data$income
+```
+###Manipulate the workclass explanatory variable
+```{r workclass data manipulation}
+#Replacing ? fields with Unknowns for the workclass variable
+adult_data$workclass <- ifelse(adult_data$workclass == '?', 
+                               'Unknown', 
+                               as.character(adult_data$workclass))
+adult_data$workclass
+#Counting numbers of people with salary >50k for each workclass
+work_class <- sqldf('SELECT workclass,
+                    count(workclass) as Count,
+                    sum(income) as Above 
+                    from adult_data
+                    group by workclass') 
+work_class
+#Calculate the proportion of individuals with >50k in each workclass, then output in a table 
+workclass_table <- data.frame(Class = work_class$workclass,
+                              Proportion = work_class$Above / work_class$Count)
+workclass_table
+#Calculate the proportion of individuals with <=50k in each workclass
+work_class$Below <- work_class$Count - work_class$Above
+#Dropping the count column since we only need the above and below stats
+work_class <- work_class[ ,c(1, 3, 4)]
+#Summarizing the Above/Below statistics for each of the workclass
+workclass <- melt(work_class,
+                  id.vars = 'workclass')
+workclass
+```
+###Creating plot for workclass
+```{r create workclass plots}
+#Creating the initial workclass plot
+work_class_plot <- ggplot(workclass,
+                          aes(x = workclass,
+                              y = value,
+                              fill = variable))
+work_class_gg <-  work_class_plot + 
+                  geom_bar(stat = 'identity') +
+                  theme_bw() +
+                  scale_fill_manual(values = c("green", "red")) +
+                  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+                  ggtitle('Proportions of above-paid within different classes')
+#Calculating the proportion of people earning above 50k based on workclass, then visualize the numbers in a table
+work_class_proportion <- tableGrob(t(1:16),
+                                  rows = NULL)
+grid.arrange(work_class_proportion, 
+             work_class_gg,
+             nrow = 2,
+             as.table = TRUE,
+             heights = c(1, 4))
+```
+###Workclass analysis conclusion: 
+Most people work in the private sector. The private sector is also where the largest number of the population that earn more than 50k per year. However, in terms of the proportion, the self-employed group has the highest ratio of people earning more than 50k per year.
+
+The private sector, which has the most people work in, has the largest number of population that earn more than 50K per year. However, in terms of the proportion, the self-employed people are the winner.
+
+## Exploring the education explanatory variable
+###Analyzing the education variable
+```{r education}
+#Querying numbers of people with salary >50k for each education level
+education_var <- sqldf('SELECT education, count(education) as Count,
+                        sum(income) as Above 
+                        from adult_data 
+                        group by education')
+#Calculate the number of people earning below 50k for each education level 
+education_var$Below <- education_var$Count - education_var$Above
+#Calculate the proportion of individuals with <=50k in each education level
+table <- data.frame(Class = education_var$education,
+                    Proportion = education_var$Above / education_var$Count)
+#Dropping the count column since we only need the above and below stats
+education_var <- education_var[ ,c(1,3,4)]
+#Summarizing the Above/Below statistics for each of the education level
+edu <- melt(education_var,
+            id.vars = 'education')
+```
+
+###Creating plot for education
+```{r create education plots}
+#Creating the initial education plot
+edu_gg <- ggplot(edu,
+                 aes(x = education,
+                     y = value,
+                     fill = variable)) +
+            geom_bar(stat = 'identity',
+                 position = 'stack') +
+            theme_bw() +
+            scale_fill_manual(values = c('green','red')) +
+            theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+            ggtitle('Proportions of above-paid within different education level')
+#Calculating the proportion of people earning above 50k based on education level, then visualize the numbers in a table
+edu_tbl <- tableGrob(t(table),
+                     rows = NULL)
+grid.arrange(edu_tbl, 
+             edu_gg,
+             nrow = 2,
+             as.table = TRUE,
+             heights = c(1, 4))
+```
+###Education variable analysis conclusion: 
+Most people has a high school diploma. However, in terms of the proportion, the Professional school group has the highest ratio of people earning more than 50k per year, with Doctorate coming in as a close second, then Masters group at third.
+
+## Exploring the race explanatory variable
+
+```{r race}
+#Querying numbers of people with salary >50k for each race
+race_var <- sqldf('SELECT race, count(race) as Count,
+                   sum(income) as Above 
+                   from adult_data 
+                   group by race')
+#Calculate the number of people earining below 50k for each race
+race_var$Below <- race_var$Count - race_var$Above
+#Calculate the proportion of individuals with <=50k in each race
+race_table <- data.frame(race_var = race_var$race,
+                         Proportion = race_var$Above / race_var$Count)
+#Dropping the count column since we only need the above and below stats
+race <- race_var[ ,c(1,3,4)]
+#Summarizing the Above/Below statistics for each of the race
+rac <- melt(race,id.vars = 'race')
+```
+
+###Creating plot for race
+```{r create race plots}
+#Creating the initial race plot
+race_gg <- ggplot(rac,
+                  aes(x = race,
+                      y = value,
+                      fill = variable)) +
+                  geom_bar(stat = 'identity',
+                           position = 'stack') +
+                  theme_bw() +
+                  scale_fill_manual(values = c('green', 'red')) +
+                  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+                  ggtitle('Proportions of above-paid within different races')
+#Calculating the proportion of people earning above 50k based on race, then visualize the numbers in a table
+race_tbl <- tableGrob(t(table),
+                      rows = NULL)
+grid.arrange(race_tbl,
+             race_gg,
+             nrow = 2,
+             as.table=TRUE,
+             heights = c(1, 4))
+```
+###Race variable analysis conclusion: 
+White is the most represented race in the dataset. In addition, statistically only, they seem to be advantageous in salary comparing to other races.
+
+## Exploring the sex variable
+```{r sex}
+#Querying numbers of people with salary >50k for each sex
+sex_var <- sqldf('SELECT sex, 
+                  count(sex) as Count,
+                  sum(income) as Above 
+                  from adult_data 
+                  group by sex')
+#Calculate the number of people earining below 50k for each sex
+sex_var$Below <- sex_var$Count - sex_var$Above
+#Calculate the proportion of individuals with <=50k in each sex
+sex_table <- data.frame(sex = sex_var$sex, 
+                        Proportion = sex_var$Above / sex_var$Count)
+#Dropping the count column since we only need the above and below stats
+sex <- sex_var[,c(1,3,4)]
+#Summarizing the Above/Below statistics for each of the sex
+se <- melt(sex,
+           id.vars = 'sex')
+se
+```
+###Creating plot for sex
+```{r create sex plots}
+#Creating the initial sex plot
+sex_gg <- ggplot(se,
+                 aes(x = sex,
+                     y = value,
+                     fill = variable)) + 
+          geom_bar(stat = 'identity',
+                   position = 'stack') +
+          theme_bw() +
+          scale_fill_manual(values = c('green', 'red')) +
+          theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+          ggtitle('Proportions of above-paid within different sexes')
+#Calculating the proportion of people earning above 50k based on sex, then visualize the numbers in a table
+sex_tbl <- tableGrob(t(table),
+                     rows = NULL)
+grid.arrange(sex_tbl,
+             sex_gg,
+             nrow = 2,
+             as.table = TRUE,
+             heights = c(1, 4))
+```
+###Sex variable analysis conclusion: 
+The plot shows that there are significantly more male individuals sampled. In addition, male employees were earning more competitive salary than female employees.
+
+## Explore Continuous Variables
+
+## Explore the Capital Loss variable
+```{r capital loss column}
+#Renaming the capital loss column by removing the "_"
+colnames(adult_data)[12] <- 'CapitalLoss'
+```
+###Creating the capital loss plot
+```{r capital loss plot}
+capital_loss_gg <- qplot(CapitalLoss,
+                         data = adult_data,
+                         geom = "histogram") +
+                         theme_bw() +
+                         ggtitle('Histogram of Capital Loss')
+capital_loss_gg
+```
+###Capital Loss variable analysis connclusion: 
+The capital loss variable is quite skewed and mostly concentrated at aroudn the zero value. As such, it may not be useful for classification.
+
+## Explore the Working hours variable
+```{r working hours data}
+#Updating the column name from hours_per_week to Hours
+colnames(adult_data)[13] <- 'Hours'
+```
+```{r working hours preliminary plot}
+#Creating a histogram for the working hours variable
+hours_gg <- qplot(Hours,
+                  data = adult_data,
+                  geom = "histogram") +
+                  theme_bw() +
+                  ggtitle('Histogram of Working Hours')
+
+hours_gg
+```
+```{r catgorizing working hours}
+#Reload the data for further data manipulation
+adult_data2 <- adult_data
+#Categorizing the working hours to NormalWorkload (<= 40 hours) and HugeWorkLoad (> 40 hours)
+adult_data2$HourJ <- ifelse(adult_data2$Hours <= 40,
+                            'NormalWorkLoad',
+                            'HugeWorkLoad')
+#Querying the count of people with huge work load vs normal workload, and the number of people earning > 50k in each category
+work_load <- sqldf('SELECT HourJ as WorkLoad,
+                    count(HourJ) as Count,
+                    sum(income) as Above 
+                    from adult_data2 
+                    group by HourJ')
+#Calculate the number of people earning below 50k for each work load
+work_load$Below <- work_load$Count - work_load$Above
+#Calculate the workload percentage
+work_load_percentage <- work_load$Above / work_load$Count
+#Dropping the count column since we only need the above and below stats
+work_load <- work_load[ ,c(1,3,4)]
+#Summarizing the Above/Below statistics for each of the sex
+wlt <- melt(work_load,
+            id.vars = 'WorkLoad')
+wlt
+#Adding the workload percentage column to the work_load table
+wl <- cbind(work_load,
+            work_load_percentage)
+```
+###Creating plots for the workload variable
+```{r workload plots}
+#Create preliminary plot for workload
+work_load_gg <- ggplot(wlt,
+                       aes(x = WorkLoad,
+                           y = value,
+                           fill = variable)) +
+                geom_bar(stat = 'identity',
+                          position = 'stack') +
+                theme_bw() + 
+                scale_fill_manual(values = c('green', 'red')) +
+                theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+                ggtitle('Proportions of above-paid with different Work Load')
+#Calculating the proportion of people earning above 50k based on work load, then visualize the numbers in a table
+work_load_tbl <- tableGrob(t(wl[,c(1,4)]), 
+                           rows = NULL)
+grid.arrange(work_load_tbl, 
+             work_load_gg,
+             nrow = 2,
+             as.table = TRUE,
+             heights = c(1, 4))
+```
+###Work load variable analysis conclusion: 
+There is a higher proportion of people with bigger workload who earn more than 50k.
+
+# Hypothesis testing:
+
+H0: People with a higher education degree (at least 14 years of education) earn above $50,000. 
+HA: People with a higher education degree (at least 14 years of education) do not earn above $50,000.
+
+##Calculate a 95% confidence interval for higher education (more than 14 years of education)
+We first need to copy the original dataset to a new one to perform a separate analysis. In addition, the education_num variable would be categorized, >= 14 years of education and < 14 years of education. 
+```{r data manipulation}
+#Manipulate the education_num variable
+#Copying data from the original data to perform separate analysis.
+adult_data3 <- adult_data
+#Categorizing the education_num variable; If >= 14 years then show >= 14, else < 14
+adult_data3$education_num <- ifelse(adult_data3$education_num >= 14,
+                                    ">= 14",
+                                    "< 14")
+#Manipulate the income variable
+#Update the income variable; change the data back to show >= 50 when 1, and <50 when 0
+adult_data3$income <- ifelse(adult_data3$income == 1, 
+                            ">= 50k", 
+                            "< 50k")
+#Show the statistics of income level vs number of years of education categories in a table
+table(adult_data3$education_num,
+      adult_data3$income)
+```
+Base on the table that shows the statistics of income level (< 50k or >= 50k) versus the number of years of education (< 14 years or >= 14 years), we can see thata majority of people were earning less than 50k and have less than 14 years of education.
+
+We then set up our experiment by dividing the data set, using the subset function, into 2 groups, a group with earnings at least 50k (>= 50k) and a group with earnings less than 50k.
+```{r further manipulation}
+#Set up experiment by subsetting the dataset to a group of earnings at least 50k and a group of earnings below 50k
+at_least_50k <- subset(adult_data3, 
+                      income == ">= 50k")
+str(at_least_50k)
+below_50k <- subset(adult_data3,
+                   income == "< 50k")
+str(below_50k)
+```
+#Inference for the >= 50k and >= 14 years of education group
+```{r inference at least 50k with at least 14 years}
+inference(at_least_50k$education_num,
+          est = "proportion",
+          type = "ci",
+          method = "theoretical",
+          success = ">= 14")
+#Calculating proportion of people earning at least 50k
+prop_min_50k_atleast14 <- 819/3846
+prop_min_50k_atleast14
+```
+##Inference on the >= 50k and >= 14 years of education group conclusion:
+The confidence interval of the group with the years of education equal to or higher than 14 while earning more than 50k is ( 0.2 , 0.2259 ).
+The P-value of the group that earns at least 50k while having at least 14 years of education is 0.2129. 
+The proportion of people earning more than 50k in 1994 with at least 14 years of education is 0.25077.
+With the p-value found well above the 0.05 or 5% threshold, the p-value is not statistically significant. Hence, the null hypothesis, which is "People with a higher education degree (at least 14 years of education) earn above 50k", is rejected, and the alternate hypothesis; that is, people with a higher education degree (at least 14 years of education) do not earn above 50k, is accepted.
+
+#Further question
+Now that the null hypothesis is rejected, we would like to examine if the education_num is, in any case, a good predictor of the income level by using the inference function on the group with income less than 50K while having less than 14 years of education.
+
+##Inference for the < 50k and < 14 years group
+```{r inference for the less than 50k and less than 14 years}
+inference(below_50k$education_num,
+          est = "proportion",
+          type = "ci",
+          method = "theoretical",
+          success = "< 14")
+#Calculating proportion of people earning at least 50k while having less than 14 years of education
+prop_below_50k_lessthan14 <- 41730/44996
+prop_below_50k_lessthan14
+```
+##Inference on the < 50k and < 14 years of education group conclusion:
+The confidence interval of the group with the years of education less than 14 while earning less than 50k is ( 0.925 , 0.9298 ).
+The P-value of the group that earns less than 50k while less than 14 years of education is 0.9274. 
+The proportion of people earning more than 50k in 1994 with at least 14 years of education is 0.9274158.
+With the p-value found well above the 0.05 or 5% threshold, the p-value is not statistically significant.
+In either cases, the p-value were not statistically significant. As a result, we can conclude that the number of years of education is not an accurate predictor of the income level. 
+
+#Findings:
+Through the analysis, we have come to the findings below:
+1. The private sector, which has the most people work in, has the largest number of population that earn more than 50K per year. However, in terms of the proportion, the self-employed people are the winner.
+2. Most people has a highschool diploma. However, in terms of the proportion, the Professional school group has the highest ratio of people earning more than 50k per year, with Doctorate coming in as a close second, then Masters group at third.
+3. White is the most represented race in the dataset. In addition, statistically only, they seem to be advantageous in salary comparing to other races.
+4.The plot for the sex data analysis shows that there are significantly more male individuals sampled. In addition, male employees were earning more competitive salary than female employees.
+5. The capital loss variable is quite skewed and mostly concentrated at aroudn the zero value. As such, it may not be useful for classification.
+6. There is a higher proportion of people with bigger workload who earn more than 50k.
+7. People with a higher education degree (at least 14 years of education) do not earn above $50,000.
+8. The number of years of education is not an accurate predictor of the income level.
+
+#Conclusion
+Through the analysis of this dataset, we were able to come to numerous interesting findings. The null hypothesis rejection shows that there is no real correlation between an individual's level of education and the income level, which goes against the popular beliefs. Further analysis can be done to determine the relationships between the explanatory variables and the target income variable; for instance, the combination of age and education_num vs income. In addition, we have found that entrepreneurs group are more likely to earn more than 50K, comparing to other groups. The dataset also represented the earning gaps between males and females, which is, currently, still an issue in our society/
